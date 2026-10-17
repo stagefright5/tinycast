@@ -36,6 +36,10 @@ and backups round-trip exactly; no stand-in takes part in either.
 4. `xcodebuild` builds into `build/DerivedData`, the bundle is checked against `features.json`,
    `Scripts/run-tests.sh` runs, and the app is installed to `/Applications` with a backup in
    `build/install-backups/` and a record in `build/install-records/`.
+5. Every other `Tinycast Dev.app` under `build/` is unregistered from LaunchServices, and `--check`
+   deletes its products: they share the bundle id, so a fuller copy would otherwise answer a
+   `raycast://` link with the installed app's preferences. Opening a backup in Finder registers it
+   again; re-run the install, or `lsregister -u` that path.
 
 `Stubs/<Feature>/` holds the stand-ins: the handful of types the rest of the app calls, with the same
 signatures and no behaviour. Coordinators hide their launcher commands (so bound shortcuts stop

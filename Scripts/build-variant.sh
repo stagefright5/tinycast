@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do
 done
 
 die() { echo "build-variant: $*" >&2; exit 1; }
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 # Canonical order, so `ai,dictation` and `dictation,ai` are the same variant.
@@ -64,6 +65,9 @@ generate() {
     command -v xcodegen > /dev/null || die "xcodegen is missing: brew install xcodegen"
     command -v node > /dev/null || die "node is missing"
     mkdir -p "$dir"
+    local exclude
+    exclude=$(git rev-parse --git-path info/exclude)
+    grep -qxF '/Tinycast-*.xcodeproj/' "$exclude" 2> /dev/null || echo '/Tinycast-*.xcodeproj/' >> "$exclude"
     xcodegen dump --quiet --type json --spec project.yml --file "$dir/upstream.json"
     # shellcheck disable=SC2086
     node Scripts/variant/make-spec.mjs "$dir/upstream.json" "$dir" "Tinycast-$name" $features
@@ -127,6 +131,20 @@ verify() {
     echo "bundle verified: $(du -sh "$app" | cut -f1 | tr -d " ") total, code $(du -sh "$app/Contents/MacOS" | cut -f1 | tr -d " ")"
 }
 
+# A registered copy of a fuller build would claim raycast:// and open with the installed app's prefs.
+forget_bundle() {
+    "$LSREGISTER" -u "$1" 2> /dev/null || true
+    rm -rf "$1"
+}
+
+claim_url_schemes() {
+    local target=$1 stale
+    while IFS= read -r stale; do
+        "$LSREGISTER" -u "$stale" 2> /dev/null || true
+    done < <(find "$ROOT/build" -name "$(basename "$target")" -type d -prune 2> /dev/null)
+    "$LSREGISTER" -f "$target"
+}
+
 install_app() {
     local features=$1 name=$2 app=$3 tests=$4
     local target="/Applications/$(basename "$app")"
@@ -167,6 +185,7 @@ install_app() {
             git log --oneline --no-merges "$previous_commit..$sha"
         fi
     } > "$record"
+    claim_url_schemes "$target"
     open "$target"
     echo "installed $target; record $record"
 }
@@ -184,8 +203,9 @@ case $mode in
             dir="build/variant/check/$name"
             step "$name"
             generate "$features" "$dir" "$name"
-            if ( build "$name" "$dir/DerivedData" "$dir/build.log" && verify "$features" "$(product_path "$dir/DerivedData")" ); then
-                :
+            product=$(product_path "$dir/DerivedData")
+            if ( build "$name" "$dir/DerivedData" "$dir/build.log" && verify "$features" "$product" ); then
+                forget_bundle "$product"
             else
                 failures+=("$name")
             fi
