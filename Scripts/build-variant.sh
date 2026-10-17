@@ -72,6 +72,8 @@ generate() {
 
 build() {
     local name=$1 derived=$2 log=$3
+    # Xcode never deletes what a variant stopped producing, so an old helper or resource survives.
+    rm -rf "$(product_path "$derived")"
     DEVELOPER_DIR=$DEVELOPER_DIR xcodebuild -project "$(project_path "$name")" -scheme Tinycast \
         -configuration "$configuration" -derivedDataPath "$derived" build > "$log" 2>&1 || {
         grep -E 'error:' "$log" | sort -u | head -40 >&2

@@ -44,7 +44,9 @@ for (const name of features) {
   for (const path of feature.exclude) {
     const absolute = resolve(root, path);
     if (!existsSync(absolute)) fail(`${name}: excluded path ${path} does not exist`);
-    for (const entry of exclusions(absolute, keep)) {
+    // The more specific rule wins: an exclude inside a kept folder still goes.
+    const insideKeep = keep.some((k) => absolute.startsWith(k + "/"));
+    for (const entry of insideKeep ? [absolute] : exclusions(absolute, keep)) {
       appSource.excludes.push(relative(join(root, "Tinycast"), entry));
     }
   }
