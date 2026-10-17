@@ -141,20 +141,17 @@ Each item is explained in [testing.md](docs/testing.md#definition-of-done).
 - `grep -rln 'import AppKit\|import SwiftUI\|import Cocoa' Tinycast/Features/*/Model/` returns nothing.
 - Any doc your change made wrong is fixed in the same commit.
 
-## Build variants (this fork)
+## Build variants
 
-The `variants` branch adds `Scripts/build-variant.sh`, which builds and installs Tinycast Dev without
-any of three features: `ai` (AI, MCP and Quick Actions), `extensions` and `dictation`. The design and
-the steps after a pull are in [Variants/README.md](Variants/README.md).
+`Scripts/build-variant.sh --without ai,extensions,dictation` builds Tinycast Dev without any of those
+features; `ai` covers AI, MCP and Quick Actions. See [Variants/README.md](Variants/README.md).
 
-- A variant changes nothing under `Tinycast/`, `project.yml` or `Tinycast.xcodeproj`. Keep it that way
-  so pulls from upstream don't conflict. The script generates `Tinycast-<variant>.xcodeproj`, which
-  stays out of git.
-- The stand-ins in `Variants/Stubs/<Feature>/` copy the signatures of the types the rest of the app
-  calls and do nothing else. When a slim build fails after a pull, change the stand-in to match the
-  real signature. Never add `#if` to an upstream file.
+- A variant changes nothing under `Tinycast/`, `project.yml` or `Tinycast.xcodeproj`, so pulls from
+  upstream never conflict. Never add `#if` to a file under `Tinycast/` for a variant.
+- When a slim build fails, change the stand-in in `Variants/Stubs/<Feature>/` to match the real
+  signature.
 - Every variant compiles each feature's `Model/` folder and the AI, MCP and Quick Action settings
   stores, so preferences, `settings.json` and backups round-trip unchanged. A stand-in never writes
   a preference.
-- Run `Scripts/build-variant.sh --check` after a pull or a stand-in change. It builds all 8
-  combinations, checks each bundle and deletes the builds it made.
+- `Scripts/build-variant.sh --check` builds and verifies all 8 combinations. Run it after a pull or a
+  stand-in change.

@@ -1,7 +1,5 @@
 import SwiftUI
 
-// Stand-ins for Features/Dictation/{Service,UI,Settings}: the surface the rest of the app calls.
-
 @MainActor
 final class DictationAudioDucker {
     func recover() {}
@@ -18,7 +16,6 @@ final class DictationModelStore {
     func stop() async {}
 }
 
-/// Which editor a mic session belongs to; never set, since nothing here records.
 struct DictationField: Equatable {
     let editor: ObjectIdentifier
     var isTranscribing = false
@@ -41,7 +38,7 @@ final class DictationCoordinator {
         self.showMessage = showMessage
     }
 
-    /// False even when the preference says on, so no mic button or panel ever appears.
+    /// Ignores `dictationEnabled`, so AI Chat never shows a mic button.
     var isEnabled: Bool { false }
     var hasModel: Bool { false }
 

@@ -1,11 +1,18 @@
 #!/bin/bash
-# Builds (and installs) Tinycast Dev without the named features. See Variants/README.md.
-#
-#   Scripts/build-variant.sh --without ai,extensions,dictation   build, verify, test, install
-#   Scripts/build-variant.sh                                     the full app, same pipeline
-#   Scripts/build-variant.sh --check                             build every combination, no install
-#
-# Options: --no-install, --skip-tests, --generate-only, --configuration Debug|Release
+usage() {
+    cat <<'USAGE'
+Usage: Scripts/build-variant.sh [--without ai,extensions,dictation] [options]
+
+  --without LIST     features to compile out; none builds the full app
+  --check            build and verify every combination, install nothing
+  --no-install       build, verify and test, but leave /Applications alone
+  --generate-only    write Tinycast-<variant>.xcodeproj and stop
+  --skip-tests       skip Scripts/run-tests.sh
+  --configuration    Debug (default) or Release
+
+See Variants/README.md.
+USAGE
+}
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -26,8 +33,8 @@ while [ $# -gt 0 ]; do
         --generate-only) mode=generate; shift;;
         --skip-tests) skip_tests=1; shift;;
         --configuration) configuration=$2; shift 2;;
-        -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
-        *) echo "build-variant: unknown option $1" >&2; exit 2;;
+        -h|--help) usage; exit 0;;
+        *) echo "build-variant: unknown option $1" >&2; usage >&2; exit 2;;
     esac
 done
 
@@ -99,7 +106,6 @@ product_path() {
     echo "$derived/Build/Products/$configuration/$name.app"
 }
 
-# Proves the bundle lost what the excluded features owned; the build alone cannot show that.
 verify() {
     local features=$1 app=$2 failed=0 name
     [ -d "$app" ] || die "no product at $app"
@@ -131,7 +137,7 @@ verify() {
     echo "bundle verified: $(du -sh "$app" | cut -f1 | tr -d " ") total, code $(du -sh "$app/Contents/MacOS" | cut -f1 | tr -d " ")"
 }
 
-# A registered copy of a fuller build would claim raycast:// and open with the installed app's prefs.
+# A registered fuller copy would answer raycast:// with the installed app's prefs.
 forget_bundle() {
     "$LSREGISTER" -u "$1" 2> /dev/null || true
     rm -rf "$1"

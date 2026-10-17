@@ -1,9 +1,6 @@
 import SwiftUI
 
-// Stand-ins for Features/Extensions/{Service,UI,Settings}. `Model/` and `ExtensionScreen` stay real:
-// they are inert value types the launcher and palette name. Nothing here runs JavaScript.
-
-/// Only the JSON helper `RenderValue` decodes with; there is no JavaScriptCore behind it.
+/// Only the JSON helper `RenderValue` calls, so JavaScriptCore stays unlinked.
 enum ExtensionRuntime {
     static func jsonArray(from json: String) -> [Any] {
         guard let data = json.data(using: .utf8),
@@ -18,12 +15,10 @@ enum ExtensionSessionState: Equatable {
     case rendered(RenderTree)
 }
 
-/// Never starts a runtime and never publishes a command, so no extension row reaches the launcher.
 @MainActor
 @Observable
 final class ExtensionManager {
     private(set) var state: ExtensionSessionState = .idle
-    /// `Never?`: there is no command that could be running.
     var running: Never? { nil }
     var isSigningIn: Bool { false }
     var navigationDepth: Int { 1 }
@@ -55,7 +50,7 @@ final class ExtensionCoordinator {
 
     func applyEnabled() {}
     func applyExtensionsLauncherPresence() {}
-    /// A shortcut bound by a full build still fires here; say why nothing happens.
+    /// A shortcut bound in a full build still lands here.
     func runExtensionCommand(entryID: String) { reportExcluded() }
     func runExtensionCommand(_ app: AppEntry, arguments: [String: String] = [:]) { reportExcluded() }
     func runDeepLink(_ link: ExtensionDeepLink) { reportExcluded() }
@@ -71,7 +66,6 @@ final class ExtensionCoordinator {
     }
 }
 
-/// Unreachable: `.extensionCommand` is only entered by running a command, which nothing can.
 struct ExtensionCommandScreen: PaletteScreen {
     let screen: ExtensionScreen
     let extensions: ExtensionManager

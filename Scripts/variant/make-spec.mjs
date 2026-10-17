@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-// Turns `xcodegen dump --type json` of project.yml into a variant spec without the named features.
 // Usage: make-spec.mjs <dumped-spec.json> <out-dir> <project-name> [feature ...]
-// Writes <out-dir>/project.json plus derived Info.plist / entitlements when a feature edits them.
-// The project must be generated beside project.yml: its SOURCE_ROOT paths resolve from there.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -44,7 +41,7 @@ for (const name of features) {
   for (const path of feature.exclude) {
     const absolute = resolve(root, path);
     if (!existsSync(absolute)) fail(`${name}: excluded path ${path} does not exist`);
-    // The more specific rule wins: an exclude inside a kept folder still goes.
+    // An exclude inside a kept folder still applies.
     const insideKeep = keep.some((k) => absolute.startsWith(k + "/"));
     for (const entry of insideKeep ? [absolute] : exclusions(absolute, keep)) {
       appSource.excludes.push(relative(join(root, "Tinycast"), entry));
@@ -66,7 +63,6 @@ for (const name of features) {
   entitlementDeletes.push(...feature.entitlements.deleteKeys);
 }
 
-// Every target still alive must not depend on a dropped one.
 for (const [name, target] of Object.entries(spec.targets)) {
   for (const dep of target.dependencies ?? []) {
     if (dep.target && !spec.targets[dep.target]) fail(`${name} still depends on dropped ${dep.target}`);
@@ -113,7 +109,6 @@ if (entitlementDeletes.length) {
 
 writeFileSync(join(outDir, "project.json"), JSON.stringify(spec, null, 2));
 
-// A folder with nothing kept inside goes whole; otherwise only its unkept children do.
 function exclusions(path, keep) {
   if (keep.some((k) => k === path || path.startsWith(k + "/"))) return [];
   if (!statSync(path).isDirectory() || !keep.some((k) => k.startsWith(path + "/"))) return [path];

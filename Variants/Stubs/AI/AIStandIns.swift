@@ -1,9 +1,5 @@
 import SwiftUI
 
-// Stand-ins for the AI cluster: Features/{AI,MCP,QuickActions} minus their Model folders and the
-// settings stores. Those stay real so preferences and settings.json round-trip byte for byte;
-// nothing here sends a request, spawns a CLI, touches the keychain or reads chat history.
-
 private let aiFeature = "AI"
 private let quickActionsFeature = "Quick Actions"
 
@@ -11,7 +7,7 @@ private let quickActionsFeature = "Quick Actions"
 
 protocol AIProvider: Sendable {}
 
-/// The one guardrail `AppCore` names; FoundationModels is never linked.
+/// In place of `SystemLanguageModel.Guardrails`, so FoundationModels stays unlinked.
 enum ExcludedGuardrails { case permissiveContentTransformations }
 
 enum AIProviderFactory {
@@ -28,7 +24,7 @@ enum AppleIntelligenceProvider {
     static func status() -> AppleIntelligenceStatus { .deviceNotEligible }
 }
 
-/// No keychain reads: `AISettingsStore` asks this for an installed CLI's environment only.
+/// `.none`, so a slim build never reads the keychain.
 extension InstalledAIEnvironmentStore {
     static var keychain: InstalledAIEnvironmentStore { .none }
 }
@@ -99,13 +95,13 @@ final class AIChatCoordinator {
         self.core = core
     }
 
-    /// Off whatever the preference says: the commands leave the launcher and their shortcuts go.
+    /// Ignores `aiEnabled`, so the commands and their shortcuts stay hidden.
     func applyEnabled() { appIndex.setCommandsVisible([.aiChat, .quickAI], false) }
     func applyRetention() {}
     func toggleWindow() { core.showMessage(ExcludedFeature.message(aiFeature), tone: .danger) }
     func focusExisting() -> Bool { false }
     func closeWindowIfKey() -> Bool { false }
-    /// True so `AppCore` never asks the MCP stand-in to start a server for a chat.
+    /// True, so `AppCore` never starts an MCP server for a chat.
     var everyChatRunsItsOwnTools: Bool { true }
     func selectedModelTitle(for chat: AIChatState) -> String { "" }
     func selectedModelIcon(for chat: AIChatState) -> PopoverMenuIcon { .symbol("sparkles") }
@@ -134,7 +130,7 @@ final class QuickAICoordinator {
     func removeLastAttachment() -> Bool { false }
 }
 
-// MARK: - Palette surfaces, unreachable once the commands are hidden
+// MARK: - Palette screens
 
 struct AIScreen: PaletteScreen {
     let vm: PaletteState
