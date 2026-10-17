@@ -97,7 +97,7 @@ product_path() {
 
 # Proves the bundle lost what the excluded features owned; the build alone cannot show that.
 verify() {
-    local features=$1 app=$2 failed=0
+    local features=$1 app=$2 failed=0 name
     [ -d "$app" ] || die "no product at $app"
     local entitlements plist
     entitlements=$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -convert json -o - - 2>/dev/null || echo '{}')
