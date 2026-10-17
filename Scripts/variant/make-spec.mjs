@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Turns `xcodegen dump --type json` of project.yml into a variant spec without the named features.
-// Usage: make-spec.mjs <dumped-spec.json> <out-dir> [feature ...]
+// Usage: make-spec.mjs <dumped-spec.json> <out-dir> <project-name> [feature ...]
 // Writes <out-dir>/project.json plus derived Info.plist / entitlements when a feature edits them.
+// The project must be generated beside project.yml: its SOURCE_ROOT paths resolve from there.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -9,9 +10,9 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const [specPath, outDir, ...features] = process.argv.slice(2);
-if (!specPath || !outDir) {
-  console.error("usage: make-spec.mjs <dumped-spec.json> <out-dir> [feature ...]");
+const [specPath, outDir, projectName, ...features] = process.argv.slice(2);
+if (!specPath || !outDir || !projectName) {
+  console.error("usage: make-spec.mjs <dumped-spec.json> <out-dir> <project-name> [feature ...]");
   process.exit(2);
 }
 
@@ -21,6 +22,7 @@ for (const name of features) {
 }
 
 const spec = JSON.parse(readFileSync(specPath, "utf8"));
+spec.name = projectName;
 const app = spec.targets?.Tinycast ?? fail("spec has no Tinycast target");
 const appSourceIndex = app.sources.findIndex((s) => (typeof s === "string" ? s : s.path) === "Tinycast");
 if (appSourceIndex < 0) fail('Tinycast target has no "Tinycast" source folder');
@@ -29,6 +31,8 @@ if (typeof app.sources[appSourceIndex] === "string") {
 }
 const appSource = app.sources[appSourceIndex];
 appSource.excludes ??= [];
+
+if (features.length) app.sources.push({ path: "Variants/Stubs/Common" });
 
 const conditions = [];
 const plistEdits = { deleteKeys: [], removeURLSchemes: [] };
@@ -47,7 +51,7 @@ for (const name of features) {
 
   const stubs = resolve(root, feature.stubs);
   if (!existsSync(stubs)) fail(`${name}: stand-in folder ${feature.stubs} does not exist`);
-  app.sources.push({ path: feature.stubs, group: `Variants/${name}` });
+  app.sources.push({ path: feature.stubs });
 
   for (const target of feature.dropTargets) delete spec.targets[target];
   app.dependencies = (app.dependencies ?? []).filter(

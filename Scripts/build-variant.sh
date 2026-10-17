@@ -56,20 +56,23 @@ developer_dir() {
     die "Xcode is not installed (xcode-select points at '$current'); the SwiftUI macros need Xcode."
 }
 
+# Beside project.yml, since SOURCE_ROOT paths resolve from the project's own folder.
+project_path() { echo "$ROOT/Tinycast-$1.xcodeproj"; }
+
 generate() {
-    local features=$1 dir=$2
+    local features=$1 dir=$2 name=$3
     command -v xcodegen > /dev/null || die "xcodegen is missing: brew install xcodegen"
     command -v node > /dev/null || die "node is missing"
     mkdir -p "$dir"
     xcodegen dump --quiet --type json --spec project.yml --file "$dir/upstream.json"
     # shellcheck disable=SC2086
-    node Scripts/variant/make-spec.mjs "$dir/upstream.json" "$dir" $features
-    xcodegen generate --quiet --spec "$dir/project.json" --project-root "$ROOT" --project "$dir"
+    node Scripts/variant/make-spec.mjs "$dir/upstream.json" "$dir" "Tinycast-$name" $features
+    xcodegen generate --quiet --spec "$dir/project.json" --project-root "$ROOT" --project "$ROOT"
 }
 
 build() {
-    local dir=$1 derived=$2 log=$3
-    DEVELOPER_DIR=$DEVELOPER_DIR xcodebuild -project "$dir/Tinycast.xcodeproj" -scheme Tinycast \
+    local name=$1 derived=$2 log=$3
+    DEVELOPER_DIR=$DEVELOPER_DIR xcodebuild -project "$(project_path "$name")" -scheme Tinycast \
         -configuration "$configuration" -derivedDataPath "$derived" build > "$log" 2>&1 || {
         grep -E 'error:' "$log" | sort -u | head -40 >&2
         die "build failed; full log: $log"
@@ -152,7 +155,7 @@ install_app() {
         echo "Configuration: $configuration"
         echo "Variant: $name"
         echo "Excluded features: ${features:-none}"
-        echo "Signing: $(codesign -dv "$target" 2>&1 | grep '^Authority=' | head -1 | cut -d= -f2)"
+        echo "Signing: Tinycast Self-Signed, leaf $(codesign -d -r- "$target" 2>&1 | grep -oE 'leaf = H"[0-9a-f]+"' | cut -d'"' -f2)"
         echo "Commit: $sha"
         [ -n "${backup:-}" ] && echo "Previous app: $ROOT/$backup/$(basename "$target")"
         echo "Validation: build succeeded; bundle verified; $tests."
@@ -178,8 +181,8 @@ case $mode in
             name=$(variant_name "$features")
             dir="build/variant/check/$name"
             step "$name"
-            generate "$features" "$dir"
-            if ( build "$dir" "$dir/DerivedData" "$dir/build.log" && verify "$features" "$(product_path "$dir/DerivedData")" ); then
+            generate "$features" "$dir" "$name"
+            if ( build "$name" "$dir/DerivedData" "$dir/build.log" && verify "$features" "$(product_path "$dir/DerivedData")" ); then
                 :
             else
                 failures+=("$name")
@@ -193,12 +196,12 @@ case $mode in
         name=$(variant_name "$features")
         dir="build/variant/$name"
         step "generating $name"
-        generate "$features" "$dir"
-        echo "$dir/Tinycast.xcodeproj"
+        generate "$features" "$dir" "$name"
+        project_path "$name"
         [ $mode = generate ] && exit 0
         DEVELOPER_DIR=$(developer_dir)
         step "building $name ($configuration)"
-        build "$dir" build/DerivedData "$dir/build.log"
+        build "$name" build/DerivedData "$dir/build.log"
         app=$(product_path build/DerivedData)
         step "verifying bundle"
         verify "$features" "$app"
