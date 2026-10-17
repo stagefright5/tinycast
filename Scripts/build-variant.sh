@@ -124,7 +124,7 @@ verify() {
         echo "  still links JavaScriptCore"; failed=1
     fi
     [ $failed -eq 0 ] || die "bundle verification failed for $app"
-    echo "bundle verified ($(du -sh "$app" | cut -f1), executable $(du -h "$app/Contents/MacOS/"* | cut -f1 | head -1))"
+    echo "bundle verified: $(du -sh "$app" | cut -f1 | tr -d " ") total, code $(du -sh "$app/Contents/MacOS" | cut -f1 | tr -d " ")"
 }
 
 install_app() {
