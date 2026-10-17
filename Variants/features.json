@@ -72,7 +72,14 @@
       "Tinycast/Features/MCP",
       "Tinycast/Features/QuickActions"
     ],
-    "keep": [],
+    "keep": [
+      "Tinycast/Features/AI/Model",
+      "Tinycast/Features/AI/Settings/AISettingsStore.swift",
+      "Tinycast/Features/MCP/Model",
+      "Tinycast/Features/MCP/Settings/MCPSettingsStore.swift",
+      "Tinycast/Features/QuickActions/Model",
+      "Tinycast/Features/QuickActions/Settings/QuickActionSettingsStore.swift"
+    ],
     "stubs": "Variants/Stubs/AI",
     "dropTargets": [],
     "dropDependencies": [],
