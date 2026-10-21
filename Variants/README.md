@@ -48,12 +48,9 @@ behaviour. A coordinator hides its launcher commands, which also stops their bou
 entry point that still fires shows "… isn't included in this build", and a Settings pane shows a
 placeholder. No stand-in writes a preference.
 
-[settings-before-after.mp4](settings-before-after.mp4) shows the Dictation, AI, Quick Actions and
-Extensions panes in a full build and in a `--without ai,extensions,dictation` build, side by side.
+## Keeping the stand-ins current
 
-## After `git pull`
-
-Run `Scripts/build-variant.sh --check`. When upstream changes an API that shared code calls on an
-excluded feature, a slim combination fails with "cannot find …" or "no member …" at that call. Add or
-change the member in `Stubs/<Feature>/` to match the real signature. When a kept `Model/` file starts
+Run `Scripts/build-variant.sh --check` after changing a type that shared code calls on AI, Extensions
+or Dictation. A stale stand-in fails a slim combination with "cannot find …" or "no member …" at
+that call. Add or change the member in `Stubs/<Feature>/` to match the real signature. When a kept `Model/` file starts
 calling into `Service/`, stub that call or add the file to `exclude` in `features.json`.

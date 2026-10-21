@@ -75,9 +75,9 @@ generate() {
     local exclude
     exclude=$(git rev-parse --git-path info/exclude)
     grep -qxF '/Tinycast-*.xcodeproj/' "$exclude" 2> /dev/null || echo '/Tinycast-*.xcodeproj/' >> "$exclude"
-    xcodegen dump --quiet --type json --spec project.yml --file "$dir/upstream.json"
+    xcodegen dump --quiet --type json --spec project.yml --file "$dir/dumped.json"
     # shellcheck disable=SC2086
-    node Scripts/variant/make-spec.mjs "$dir/upstream.json" "$dir" "Tinycast-$name" $features
+    node Scripts/variant/make-spec.mjs "$dir/dumped.json" "$dir" "Tinycast-$name" $features
     xcodegen generate --quiet --spec "$dir/project.json" --project-root "$ROOT" --project "$ROOT"
 }
 

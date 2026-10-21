@@ -146,12 +146,12 @@ Each item is explained in [testing.md](docs/testing.md#definition-of-done).
 `Scripts/build-variant.sh --without ai,extensions,dictation` builds Tinycast Dev without any of those
 features; `ai` covers AI, MCP and Quick Actions. See [Variants/README.md](Variants/README.md).
 
-- A variant changes nothing under `Tinycast/`, `project.yml` or `Tinycast.xcodeproj`, so pulls from
-  upstream never conflict. Never add `#if` to a file under `Tinycast/` for a variant.
-- When a slim build fails, change the stand-in in `Variants/Stubs/<Feature>/` to match the real
-  signature.
+- A variant changes nothing under `Tinycast/`, `project.yml` or `Tinycast.xcodeproj`; the script
+  generates its own project. Never add `#if` to a file under `Tinycast/` for a variant.
+- Changing a type that shared code calls on AI, Extensions or Dictation means changing its stand-in
+  in `Variants/Stubs/<Feature>/` to the same signature.
 - Every variant compiles each feature's `Model/` folder and the AI, MCP and Quick Action settings
   stores, so preferences, `settings.json` and backups round-trip unchanged. A stand-in never writes
   a preference.
-- `Scripts/build-variant.sh --check` builds and verifies all 8 combinations. Run it after a pull or a
-  stand-in change.
+- `Scripts/build-variant.sh --check` builds and verifies all 8 combinations. Run it after changing
+  one of those types or a stand-in.
