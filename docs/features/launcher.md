@@ -47,6 +47,9 @@ reports notification-dependent checks as skipped when the session cannot deliver
   apply to applications and quietly skip snippets — and nothing is built per keystroke. `AppIndex.scan`
   names the app slice on its own, off-main: transliterating a CJK index is ICU work, and
   `publishEntries` runs on the main actor whenever any unrelated slice changes.
+- **Tinycast never translates a name it did not write.** Apps, panes, quicklinks, snippets and
+  extensions read the way their source names them. A built-in command shows its translated name and
+  keeps its English source as an alternate title, so `clipboard` finds it in every language.
 - **The fields stay separate.** Which field matched is half of what the comparator reads — an exact
   subtitle, an exact alternate title and a keyword hit are three different rules.
 - **`Model/SearchScopes.swift` and `Model/LauncherRankingStore.swift` are pure too** — the ranking store
@@ -193,16 +196,19 @@ matches, and is learned, under the same key. ASCII text skips ICU entirely on a 
 ## Names in the user's language
 
 `BundleLocalization` reads both `InfoPlist.loctable` and `<code>.lproj/InfoPlist.strings` for
-`Locale.preferredLanguages` plus English. This matters because `CFBundle` resolves only
+macOS's own languages (`SystemLanguages.preferred`) plus English — not `Locale.preferredLanguages`,
+which turns into Tinycast's interface language once one is picked, and would rename every app. This matters because `CFBundle` resolves only
 `InfoPlist.strings`, and every app under `/System/Applications` translates in the loctable alone — so
 all 65 of them read English on every Mac, whatever language it is set to.
 
-A tag carrying a script is read under two more codes, because no one folder name covers it: a
-`zh-Hans-CN` Mac also reads `zh-Hans`, the folder most third-party apps ship, then `zh_CN`, the key
-Apple's own loctables use. A script-only `zh-Hans` maximizes to reach the same region. A tag without a
-script otherwise keeps its exact, underscore and bare-language forms. Bokmål (`nb`) additionally
-reads `no` after `nb`, because Apple's Norwegian loctables use that key; an explicit `nb.lproj` still
-wins. Other languages, including Nynorsk (`nn`), gain no alias.
+A tag carrying a script is read under more codes, because no one folder name covers it: a
+`zh-Hans-US` Mac also reads `zh-Hans`, the folder most third-party apps ship, then its own region
+`zh_US`, then `zh_CN`, the script's home region and the key Apple's own loctables use. A region is read
+only when it writes the tag's script, so `zh-Hans-HK` skips the Traditional `zh_HK`, and `zh-Hant-HK`
+reads `zh_HK` before `zh_TW`. A tag without a script otherwise keeps its exact, underscore and
+bare-language forms. Bokmål (`nb`) additionally reads `no` after `nb`, because Apple's Norwegian
+loctables use that key; an explicit `nb.lproj` still wins. Other languages, including Nynorsk (`nn`),
+gain no alias.
 
 The user's own language wins the **display name**, so a row reads the way Finder reads it. The rest,
 English included, ride along as alternate titles, matched as typed and never transliterated.
