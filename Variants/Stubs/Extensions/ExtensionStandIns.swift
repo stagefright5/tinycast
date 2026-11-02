@@ -116,7 +116,7 @@ struct ExtensionSelectionForwarder: ViewModifier {
 }
 
 struct ExtensionShortcutKeys: ViewModifier {
-    let screen: ExtensionCommandScreen?
+    let screen: () -> ExtensionCommandScreen?
     let selection: Int
     func body(content: Content) -> some View { content }
 }
