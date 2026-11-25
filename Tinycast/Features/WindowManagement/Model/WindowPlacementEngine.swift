@@ -57,11 +57,15 @@ enum WindowPlacementEngine {
         var restoreFrame: CGRect?
         /// The tile that last placed this window, so a display move re-derives rather than scales.
         var lastTileCommand: WindowCommand.ID?
+        var wrapsDisplays: Bool
+        /// Off, a display move keeps the window's size in points.
+        var keepsProportions: Bool
 
         init(
             command: WindowCommand.ID, windowFrame: CGRect, screens: [Screen], gap: CGFloat = 0,
             step: Int = 0, cycle: WindowCycle = .off, originScreenID: Int? = nil,
-            restoreFrame: CGRect? = nil, lastTileCommand: WindowCommand.ID? = nil
+            restoreFrame: CGRect? = nil, lastTileCommand: WindowCommand.ID? = nil,
+            wrapsDisplays: Bool = true, keepsProportions: Bool = true
         ) {
             self.command = command
             self.windowFrame = windowFrame
@@ -72,6 +76,8 @@ enum WindowPlacementEngine {
             self.originScreenID = originScreenID
             self.restoreFrame = restoreFrame
             self.lastTileCommand = lastTileCommand
+            self.wrapsDisplays = wrapsDisplays
+            self.keepsProportions = keepsProportions
         }
     }
 
@@ -80,6 +86,8 @@ enum WindowPlacementEngine {
         var screenID: Int
         var anchor: Anchor
         var resizes: Bool
+        /// The tile the window now is, which a later display move re-derives instead of scaling.
+        var tile: WindowCommand.ID?
     }
 
     // MARK: - Tuning
@@ -95,6 +103,24 @@ enum WindowPlacementEngine {
 
     /// The target placement, or `nil` when the mover should write nothing at all.
     static func placement(for input: Input) -> Placement? {
+        guard var placement = geometry(for: input) else { return nil }
+        placement.tile = tile(landedBy: input)
+        return placement
+    }
+
+    /// Off, Keep aspect ratio moves the window in points, so it stops being the tile it was.
+    private static func tile(landedBy input: Input) -> WindowCommand.ID? {
+        switch input.command {
+        case .nextDisplay, .previousDisplay:
+            guard input.keepsProportions, let last = input.lastTileCommand, isTileCommand(last)
+            else { return nil }
+            return last
+        default:
+            return isTileCommand(input.command) ? input.command : nil
+        }
+    }
+
+    private static func geometry(for input: Input) -> Placement? {
         guard let command = WindowCommandCatalog.command(id: input.command),
             command.kind == .geometry || command.kind == .restore,
             !input.screens.isEmpty
@@ -106,14 +132,14 @@ enum WindowPlacementEngine {
             host.visibleFrame.width > 0, host.visibleFrame.height > 0
         else { return nil }
 
-        let gap = sanitizedGap(input.gap, in: host.visibleFrame)
-
         switch input.command {
         case .nextDisplay, .previousDisplay:
-            return displayPlacement(input, from: host, gap: gap)
+            return displayPlacement(input, from: host)
         default:
             break
         }
+
+        let gap = sanitizedGap(input.gap, in: host.visibleFrame)
 
         // `cycleLength` is 1 for a non-cycling command, so a stale step can never leak in.
         let step = wrapped(
@@ -123,10 +149,11 @@ enum WindowPlacementEngine {
         if let half = Half.of(input.command) {
             return halfPlacement(input, half: half, host: host, step: step)
         }
-        if input.command == .centerHalf {
-            return tilePlacement(centeredFractions(sizeCycle[step]), on: host, gap: gap)
-        }
-        if let fractions = tileFractions(input.command) {
+        let base =
+            input.command == .centerHalf
+            ? centeredFractions(sizeCycle[step]) : tileFractions(input.command)
+        if let base {
+            let fractions = oriented(base, for: input.command, on: host)
             return tilePlacement(fractions, on: host, gap: gap)
         }
 
@@ -183,9 +210,11 @@ enum WindowPlacementEngine {
                 frame: resized(current, in: canvas, larger: input.command == .makeLarger),
                 screenID: host.id, anchor: .centered, resizes: true)
 
-        case .moveLeft, .moveRight, .moveUp, .moveDown:
+        case .moveLeft, .moveRight, .moveUp, .moveDown, .moveToLeftEdge, .moveToRightEdge,
+            .moveToTopEdge, .moveToBottomEdge:
+            guard !current.isEmpty else { return nil }
             return Placement(
-                frame: nudged(current, in: canvas, command: input.command), screenID: host.id,
+                frame: shifted(current, in: canvas, command: input.command), screenID: host.id,
                 anchor: .topLeading, resizes: false)
 
         default:
@@ -217,45 +246,48 @@ enum WindowPlacementEngine {
         }
     }
 
-    private static func displayPlacement(
-        _ input: Input, from host: Screen, gap: CGFloat
-    )
-        -> Placement?
-    {
+    private static func displayPlacement(_ input: Input, from host: Screen) -> Placement? {
         let ordered = ordered(input.screens)
         // A single display makes both commands a quiet no-op rather than a pointless re-place.
         guard ordered.count > 1, let index = ordered.firstIndex(where: { $0.id == host.id })
         else { return nil }
-        let offset = input.command == .nextDisplay ? 1 : -1
-        let destination = ordered[(index + offset + ordered.count) % ordered.count]
-        let frame = moved(
-            input.windowFrame, from: host, to: destination, gap: gap,
-            lastTile: input.lastTileCommand)
+        let next = index + (input.command == .nextDisplay ? 1 : -1)
+        guard input.wrapsDisplays || ordered.indices.contains(next) else { return nil }
+        let destination = ordered[(next + ordered.count) % ordered.count]
+        let frame = moved(input, from: host, to: destination)
         return Placement(
             frame: frame, screenID: destination.id, anchor: .centered, resizes: true)
     }
 
-    private static func moved(
-        _ frame: CGRect, from: Screen, to: Screen, gap: CGFloat, lastTile: WindowCommand.ID?
-    ) -> CGRect {
+    private static func moved(_ input: Input, from: Screen, to: Screen) -> CGRect {
+        let frame = input.windowFrame
+        let targetGap = sanitizedGap(input.gap, in: to.visibleFrame)
+        let source = canvas(from.visibleFrame, gap: sanitizedGap(input.gap, in: from.visibleFrame))
+        let target = canvas(to.visibleFrame, gap: targetGap)
+        guard input.keepsProportions else {
+            let kept = CGRect(
+                x: target.minX + frame.minX - source.minX,
+                y: target.minY + frame.minY - source.minY,
+                width: min(to.visibleFrame.width, frame.width),
+                height: min(to.visibleFrame.height, frame.height))
+            return rounded(clamped(kept, into: to.visibleFrame))
+        }
         // Exactness beats proportion: an untouched tile re-derives instead of being scaled.
-        if let lastTile, let fractions = tileFractions(lastTile) {
+        if let lastTile = input.lastTileCommand, let base = tileFractions(lastTile) {
+            let fractions = oriented(base, for: lastTile, on: to)
             return tile(
                 to.visibleFrame, x0: fractions.x0, x1: fractions.x1, y0: fractions.y0,
-                y1: fractions.y1, gap: sanitizedGap(gap, in: to.visibleFrame))
+                y1: fractions.y1, gap: targetGap)
         }
-        let source = from.visibleFrame
-        let target = to.visibleFrame
         guard source.width > 0, source.height > 0 else { return frame }
-        // Relative to `visibleFrame`, so a window tucked against the Dock lands tucked again.
         let relativeX = (frame.minX - source.minX) / source.width
         let relativeY = (frame.minY - source.minY) / source.height
         let scaled = CGRect(
             x: target.minX + relativeX * target.width,
             y: target.minY + relativeY * target.height,
-            width: min(target.width, frame.width / source.width * target.width),
-            height: min(target.height, frame.height / source.height * target.height))
-        return rounded(clamped(scaled, into: target))
+            width: min(to.visibleFrame.width, frame.width / source.width * target.width),
+            height: min(to.visibleFrame.height, frame.height / source.height * target.height))
+        return rounded(clamped(scaled, into: to.visibleFrame))
     }
 
     // MARK: - Restore
@@ -285,10 +317,30 @@ enum WindowPlacementEngine {
         var y0: CGFloat
         var y1: CGFloat
         var anchor: Anchor
+
+        var transposed: Fractions {
+            Fractions(
+                x0: y0, x1: y1, y0: x0, y1: x1,
+                anchor: Anchor(horizontal: anchor.vertical, vertical: anchor.horizontal))
+        }
     }
 
     private static let oneThird: CGFloat = 1.0 / 3.0
     private static let twoThirds: CGFloat = 2.0 / 3.0
+
+    /// Named by order rather than by side, so a portrait screen stacks them top to bottom.
+    private static let followsLongSide: Set<WindowCommand.ID> = [
+        .firstThreeFourths, .lastThreeFourths, .firstThird, .centerThird, .lastThird,
+        .firstTwoThirds, .lastTwoThirds, .centerHalf, .centerTwoThirds
+    ]
+
+    /// Reads the display's `frame`, so a side or bottom Dock never decides the orientation.
+    private static func oriented(
+        _ fractions: Fractions, for command: WindowCommand.ID, on screen: Screen
+    ) -> Fractions {
+        let portrait = screen.frame.height > screen.frame.width
+        return portrait && followsLongSide.contains(command) ? fractions.transposed : fractions
+    }
 
     private struct Half {
         enum Axis { case horizontal, vertical }
@@ -483,7 +535,7 @@ enum WindowPlacementEngine {
         return rounded(clamped(centred, into: canvas))
     }
 
-    private static func nudged(
+    private static func shifted(
         _ frame: CGRect, in canvas: CGRect, command: WindowCommand.ID
     )
         -> CGRect
@@ -496,6 +548,10 @@ enum WindowPlacementEngine {
         case .moveRight: moved.origin.x += dx
         case .moveUp: moved.origin.y -= dy
         case .moveDown: moved.origin.y += dy
+        case .moveToLeftEdge: moved.origin.x = canvas.minX
+        case .moveToRightEdge: moved.origin.x = canvas.maxX - frame.width
+        case .moveToTopEdge: moved.origin.y = canvas.minY
+        case .moveToBottomEdge: moved.origin.y = canvas.maxY - frame.height
         default: break
         }
         return rounded(clamped(moved, into: canvas))

@@ -19,6 +19,18 @@ final class AISettingsStore {
     var choicesEnabled: Bool {
         didSet { defaults.set(choicesEnabled, forKey: AppSettingsKey.aiChoices.rawValue) }
     }
+    /// Off by default: a fold keeps the answer in view, and one click opens the thinking.
+    var expandsReasoning: Bool {
+        didSet {
+            defaults.set(expandsReasoning, forKey: AppSettingsKey.aiExpandsReasoning.rawValue)
+        }
+    }
+    var usageMenuBarEnabled: Bool {
+        didSet { defaults.set(usageMenuBarEnabled, forKey: AppSettingsKey.aiUsageMenuBar.rawValue) }
+    }
+    var usageAlertsEnabled: Bool {
+        didSet { defaults.set(usageAlertsEnabled, forKey: AppSettingsKey.aiUsageAlerts.rawValue) }
+    }
     /// Appended to `AIInstructions.preamble` on every turn, so it is billed on every turn.
     var systemPrompt: String {
         didSet { defaults.set(systemPrompt, forKey: AppSettingsKey.aiSystemPrompt.rawValue) }
@@ -94,6 +106,11 @@ final class AISettingsStore {
             defaults.object(forKey: AppSettingsKey.aiWebSearch.rawValue) as? Bool ?? false
         choicesEnabled =
             defaults.object(forKey: AppSettingsKey.aiChoices.rawValue) as? Bool ?? true
+        expandsReasoning =
+            defaults.object(forKey: AppSettingsKey.aiExpandsReasoning.rawValue) as? Bool ?? false
+        usageMenuBarEnabled = defaults.bool(forKey: AppSettingsKey.aiUsageMenuBar.rawValue)
+        usageAlertsEnabled =
+            defaults.object(forKey: AppSettingsKey.aiUsageAlerts.rawValue) as? Bool ?? true
         systemPrompt = defaults.string(forKey: AppSettingsKey.aiSystemPrompt.rawValue) ?? ""
         systemPromptEnabled =
             defaults.object(forKey: AppSettingsKey.aiSystemPromptEnabled.rawValue) as? Bool ?? true
@@ -129,6 +146,45 @@ final class AISettingsStore {
         if defaultModel == nil {
             defaultModel = firstAvailableSelection()
         }
+    }
+
+    /// Adopts what another process stored; a tool whose launch moved is checked again.
+    func reload() {
+        let stored = AISettingsStore(
+            defaults: defaults, environmentStore: environmentStore,
+            isAppleIntelligenceAvailable: isAppleIntelligenceAvailable)
+        for kind in InstalledAIKind.allCases where stored.override(for: kind) != override(for: kind) {
+            noteLaunchChanged(for: kind)
+        }
+        adopt(\.installedOverrides, from: stored)
+        adopt(\.connections, from: stored)
+        adopt(\.defaultModel, from: stored)
+        adopt(\.webSearchEnabled, from: stored)
+        adopt(\.choicesEnabled, from: stored)
+        adopt(\.expandsReasoning, from: stored)
+        adopt(\.usageMenuBarEnabled, from: stored)
+        adopt(\.usageAlertsEnabled, from: stored)
+        adopt(\.systemPrompt, from: stored)
+        adopt(\.systemPromptEnabled, from: stored)
+        adopt(\.retention, from: stored)
+        adopt(\.opensTo, from: stored)
+        adopt(\.newChatAfter, from: stored)
+        adopt(\.toolRounds, from: stored)
+        adopt(\.shownModels, from: stored)
+        adopt(\.disabledRoutes, from: stored)
+        adopt(\.enabledInstalledProviders, from: stored)
+    }
+
+    /// A Keychain variable can change while every stored name stays the same.
+    func noteLaunchChanged(for kind: InstalledAIKind) {
+        launchRevisions[kind, default: 0] += 1
+    }
+
+    private func adopt<Value: Equatable>(
+        _ property: ReferenceWritableKeyPath<AISettingsStore, Value>, from stored: AISettingsStore
+    ) {
+        let value = stored[keyPath: property]
+        if self[keyPath: property] != value { self[keyPath: property] = value }
     }
 
     func connection(id: UUID) -> AIConnection? {
@@ -305,7 +361,7 @@ final class AISettingsStore {
         override.commandPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard override != self.override(for: kind) else { return }
         installedOverrides[kind] = override.isEmpty ? nil : override
-        launchRevisions[kind, default: 0] += 1
+        noteLaunchChanged(for: kind)
     }
 
     func environment(for kind: InstalledAIKind) throws -> [InstalledAIVariable] {
@@ -327,7 +383,7 @@ final class AISettingsStore {
         var override = override(for: kind)
         override.environmentNames = kept.map(\.name)
         installedOverrides[kind] = override.isEmpty ? nil : override
-        launchRevisions[kind, default: 0] += 1
+        noteLaunchChanged(for: kind)
     }
 
     /// Reads the Keychain only for a tool that has variables, so most launches never touch it.
@@ -341,19 +397,6 @@ final class AISettingsStore {
         return InstalledAILaunch(
             commandPath: override.commandPath,
             environment: values.filter { names.contains($0.key) })
-    }
-
-    func disableInstalledModelSelection(for kind: InstalledAIKind) {
-        guard let source = defaultModel?.source else { return }
-        let matches =
-            switch (kind, source) {
-            case (.codex, .codex), (.claude, .claude), (.grok, .grok), (.openCode, .openCode),
-                (.cursor, .cursor):
-                true
-            default: false
-            }
-        guard matches else { return }
-        defaultModel = firstAvailableSelection()
     }
 
     /// The on-device model leads: free, private, always configured, so never a surprising landing.
@@ -421,6 +464,8 @@ final class AISettingsStore {
             seen.contains($0.key) && !$0.value.efforts.isEmpty
         }
         if connection.reasoningOptions?.isEmpty == true { connection.reasoningOptions = nil }
+        connection.outputLimits = connection.outputLimits?.filter { seen.contains($0.key) }
+        if connection.outputLimits?.isEmpty == true { connection.outputLimits = nil }
         return connection
     }
 

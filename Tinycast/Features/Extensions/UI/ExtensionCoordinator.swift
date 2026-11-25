@@ -35,12 +35,11 @@ final class ExtensionCoordinator {
         Task { await extensions.setEnabled(settings.extensionsEnabled) }
     }
 
-    /// Also consent to run third-party JavaScript, so it asks before it starts.
+    /// Also consent to run third-party JavaScript, so it asks; the switch's track starts them.
     func setExtensionsEnabled(_ enabled: Bool) {
         guard enabled != settings.extensionsEnabled else { return }
         guard enabled else {
             settings.extensionsEnabled = false
-            Task { await extensions.setEnabled(false) }
             return
         }
 
@@ -60,7 +59,6 @@ final class ExtensionCoordinator {
             else { return }
 
             settings.extensionsEnabled = true
-            await extensions.setEnabled(true)
         }
     }
 
@@ -83,6 +81,14 @@ final class ExtensionCoordinator {
         runExtensionCommand(entry)
     }
 
+    /// The link Copy Deeplink gives an extension row; extensions alone know their URL shape.
+    func deepLink(forEntryID entryID: String, arguments: [String: String]) -> URL? {
+        guard let ref = ExtensionCommandRef(entryID: entryID) else { return nil }
+        return ExtensionDeepLink.url(
+            extensionName: ref.extensionName, commandName: ref.commandName, arguments: arguments,
+            scheme: AppURLScheme.current)
+    }
+
     /// A `raycast://extensions/…` link: the same command the launcher would run, by slug.
     func runDeepLink(_ link: ExtensionDeepLink) {
         guard settings.extensionsEnabled else {
@@ -97,7 +103,7 @@ final class ExtensionCoordinator {
         }
         run(
             owner, command: command, arguments: link.arguments, fallbackText: link.fallbackText,
-            launchType: link.launchType)
+            launchType: link.launchType, launchContext: link.launchContext)
     }
 
     // MARK: - Managing one extension from the launcher
@@ -127,44 +133,41 @@ final class ExtensionCoordinator {
         paletteCoordinator.hidePalette(restoreFocus: false)
         NSApp.activate(ignoringOtherApps: true)
         Task {
-            guard
-                await core.confirm(
-                    title: String(localized: "Uninstall \(owner.title)?"),
-                    message: String(
-                        localized: """
-                            Removes the extension and everything it stored — its preferences, its cache \
-                            and its own files. Its commands leave the launcher.
-                            """),
-                    symbol: "trash", confirmTitle: String(localized: "Uninstall"))
-            else { return }
+            guard await confirmsUninstall(owner) else { return }
             await extensions.uninstall(owner)
         }
     }
 
-    /// Destructive: an orphaned support directory is an extension's own files, so it asks first.
-    func confirmCleanup(_ report: ExtensionCleanup.Report) async {
-        guard !report.isEmpty else { return }
-        let size = ExtensionCleanup.formatted(bytes: report.bytes)
-        guard
-            await core.confirm(
-                title: String(localized: "Clean up \(size)?"),
-                message: String(
+    /// The question alone, so Settings' process can ask it and leave the uninstall to the main app.
+    func confirmsUninstall(_ owner: InstalledExtension) async -> Bool {
+        await core.confirm(
+            title: String(localized: "Uninstall \(owner.title)?"),
+            message: core.cloudSyncCoordinator.syncs(.extensions)
+                ? String(
                     localized: """
-                        Removes build files left by an interrupted install, and the storage of \
-                        extensions that are no longer installed. Installed extensions are untouched.
+                        Removes the extension and everything it stored — its preferences, its \
+                        cache and its own files — on this Mac and your other Macs.
+                        """)
+                : String(
+                    localized: """
+                        Removes the extension and everything it stored — its preferences, its cache \
+                        and its own files. Its commands leave the launcher.
                         """),
-                symbol: "trash", confirmTitle: String(localized: "Clean Up"))
-        else { return }
+            symbol: "trash", confirmTitle: String(localized: "Uninstall"))
+    }
 
-        let installed = Set(extensions.installed.map(\.manifest.name))
-        let roots = ExtensionCleanup.defaultRoots()
-        let freed = await Task.detached(priority: .userInitiated) {
-            ExtensionCleanup.clean(installed: installed, in: roots)
-        }.value
-        core.showMessage(
-            freed.isEmpty
-                ? String(localized: "Nothing to clean up")
-                : String(localized: "Reclaimed \(ExtensionCleanup.formatted(bytes: freed.bytes))"))
+    /// Destructive: an orphaned support directory is an extension's own files, so it asks first.
+    func confirmsCleanup(_ report: ExtensionCleanup.Report) async -> Bool {
+        guard !report.isEmpty else { return false }
+        let size = ExtensionCleanup.formatted(bytes: report.bytes)
+        return await core.confirm(
+            title: String(localized: "Clean up \(size)?"),
+            message: String(
+                localized: """
+                    Removes build files left by an interrupted install, and the storage of \
+                    extensions that are no longer installed. Installed extensions are untouched.
+                    """),
+            symbol: "trash", confirmTitle: String(localized: "Clean Up"))
     }
 
     /// What no index prunes: left behind, these key a shortcut or a rank to a vanished command.

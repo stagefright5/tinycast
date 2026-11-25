@@ -63,7 +63,7 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             isPoppedToRoot = false
             core.palette.focusToken = UUID()
             // Summoned over one of our own windows: there is no external paste or focus target.
-            let frontmost = NSWorkspace.shared.frontmostApplication
+            let frontmost = FrontmostApp.current
             let ownPID = NSRunningApplication.current.processIdentifier
             previousApp = frontmost?.processIdentifier == ownPID ? nil : frontmost
             // Recorded even when another app is frontmost: our panels take key without activating.
@@ -450,9 +450,6 @@ final class PaletteWindowController: NSObject, NSWindowDelegate {
             }
             guard let character = Self.commandCharacter(from: event) else { return false }
             switch character {
-            case ",":
-                self.core.settingsCoordinator.showSettings()
-                return true
             // Pin. Swallowed on every screen, since ⌘. only ever means cancel to a search field.
             case ".":
                 self.core.palette.notePinChord()

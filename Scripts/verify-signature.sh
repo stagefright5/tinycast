@@ -30,10 +30,12 @@ codesign -d --entitlements - --xml "$APP" > "$ENTITLEMENTS" 2>/dev/null
 
 # The helper is signed by its own embed phase, which is where the runtime flag goes missing.
 HELPER="$APP/Contents/Helpers/Tinycast Dictation.app"
-for BIN in "$APP/Contents/MacOS/$NAME" "$APP/Contents/Helpers/ClipboardTextHelper" "$HELPER/Contents/MacOS/Tinycast Dictation"; do
+for BIN in "$APP/Contents/MacOS/$NAME" "$APP/Contents/Helpers/ClipboardTextHelper" "$APP/Contents/Helpers/FileIndexHelper" "$HELPER/Contents/MacOS/Tinycast Dictation"; do
     INFO="$(codesign -dv --verbose=2 "$BIN" 2>&1)"
     [[ "$INFO" =~ flags=0x[0-9a-f]+\([^\)]*runtime ]] ||
         fail "${BIN##*/}: hardened runtime not enabled"
+    [[ "$INFO" == *$'\nAuthority=Developer ID Application: '* && "$INFO" == *$'\nTimestamp='* ]] ||
+        fail "${BIN##*/}: not signed with a timestamped Developer ID"
 done
 
 APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
@@ -57,7 +59,17 @@ for PAIR in "${RESOURCE_ENTITLEMENTS[@]}"; do
         fail "$NAME.app: $USAGE is declared but $ENTITLEMENT is not"
 done
 
+# iCloud Sync: AMFI refuses these entitlements without the profile, and a wrong one syncs nowhere.
+[ -f "$APP/Contents/embedded.provisionprofile" ] || fail "$NAME.app: no embedded provisioning profile"
+entitlement() { /usr/libexec/PlistBuddy -c "Print :$1" "$ENTITLEMENTS" 2>/dev/null; }
+[ "$(entitlement com.apple.developer.icloud-container-identifiers:0)" = "iCloud.$APP_ID" ] ||
+    fail "$NAME.app: its iCloud container is not iCloud.$APP_ID"
+[ "$(entitlement com.apple.developer.icloud-container-environment)" = Production ] ||
+    fail "$NAME.app: iCloud is not set to Production"
+[ "$(entitlement com.apple.developer.aps-environment)" = production ] ||
+    fail "$NAME.app: push is not set to production"
+
 if [ "$STATUS" -eq 0 ]; then
-    echo "✓ $NAME.app is notarizable and its prompts are entitled"
+    echo "✓ $NAME.app is notarizable, its prompts are entitled and it can reach iCloud"
 fi
 exit "$STATUS"

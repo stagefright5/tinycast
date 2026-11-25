@@ -3,6 +3,7 @@ import SwiftUI
 struct WindowManagementSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(AppCore.self) private var core
+    @Environment(MainAppLink.self) private var mainApp
     @State private var editor: WindowLayoutEditRequest?
     @State private var pendingDeletion: WindowLayout?
     @State private var customSizeEdit: CustomWindowSizeEditRequest?
@@ -53,7 +54,7 @@ struct WindowManagementSettingsView: View {
                 title: Text("Delete \u{201C}\(layout.name)\u{201D}?"),
                 message: Text("Its global shortcut and launcher references go with it."),
                 primaryButton: .destructive(Text("Delete")) {
-                    core.windowLayoutCoordinator.deleteWindowLayout(id: layout.id)
+                    mainApp.send(.deleteWindowLayout(layout.id))
                 },
                 secondaryButton: .cancel())
         }
@@ -85,6 +86,16 @@ struct WindowManagementSettingsView: View {
             } label: {
                 SettingsRowTitle(.windowManagementOptions, "Gap between windows")
                 Text("Between tiled windows and screen edges.")
+            }
+
+            Toggle(isOn: $settings.windowWrapsDisplays) {
+                SettingsRowTitle(.windowManagementOptions, "Wrap around displays")
+                Text("Moving past the last display returns to the first.")
+            }
+
+            Toggle(isOn: $settings.windowKeepsProportions) {
+                SettingsRowTitle(.windowManagementOptions, "Keep aspect ratio")
+                Text("Off keeps a window's size when it moves to another display.")
             }
 
             LabeledContent {
@@ -139,7 +150,7 @@ private struct WindowCommandSettingsRow: View {
         let entry = AppEntry(command)
         let isVisible = visibility.isItemVisible(entry)
         SettingsRow(title: command.name) {
-            Image(systemName: command.sfSymbol)
+            SettingsSymbolTile(symbol: command.sfSymbol, tint: SettingsTab.windowManagement.tint)
         } trailing: {
             // The ranker never sees a hidden entry, so typing here would match nothing.
             AliasField(entry: entry)

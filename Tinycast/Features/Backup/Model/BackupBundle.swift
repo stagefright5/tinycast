@@ -17,23 +17,20 @@ struct BackupBundle: Sendable {
     // MARK: - Layout
 
     var manifestURL: URL { root.appendingPathComponent("manifest.json") }
-    var settingsURL: URL { root.appendingPathComponent("settings.json") }
 
-    private func directory(for category: BackupCategory) -> URL {
-        let subpath = category.descriptor.subpath
-        guard !subpath.isEmpty else { return root }
-        return root.appendingPathComponent(subpath, isDirectory: true)
+    func location(of category: BackupCategory) -> URL {
+        root.appendingPathComponent(category.descriptor.subpath)
     }
 
-    var clipboardItemsURL: URL { directory(for: .clipboard).appendingPathComponent("items.jsonl") }
+    var clipboardItemsURL: URL { location(of: .clipboard).appendingPathComponent("items.jsonl") }
     var clipboardImagesDirectory: URL {
-        directory(for: .clipboard).appendingPathComponent("images", isDirectory: true)
+        location(of: .clipboard).appendingPathComponent("images", isDirectory: true)
     }
-    var snippetsDirectory: URL { directory(for: .snippets) }
-    var notesDirectory: URL { directory(for: .notes) }
+    var snippetsDirectory: URL { location(of: .snippets) }
+    var notesDirectory: URL { location(of: .notes) }
 
     func learningURL(_ part: LearningPart) -> URL {
-        directory(for: .learning).appendingPathComponent("\(part.rawValue).json")
+        location(of: .learning).appendingPathComponent("\(part.rawValue).json")
     }
 
     // MARK: - Writing
@@ -44,7 +41,7 @@ struct BackupBundle: Sendable {
         if categories.contains(.clipboard) { try create(clipboardImagesDirectory) }
         if categories.contains(.snippets) { try create(snippetsDirectory) }
         if categories.contains(.notes) { try create(notesDirectory) }
-        if categories.contains(.learning) { try create(directory(for: .learning)) }
+        if categories.contains(.learning) { try create(location(of: .learning)) }
     }
 
     func write(_ data: Data, to url: URL) throws {
@@ -103,8 +100,16 @@ struct BackupBundle: Sendable {
     /// Mapped and decoded lazily, so a gigabyte of history costs one clip of resident memory.
     func clipboardItems() -> some Sequence<BackupClipboardItem> {
         let data = (try? Data(contentsOf: clipboardItemsURL, options: .mappedIfSafe)) ?? Data()
-        return data.split(separator: 0x0A, omittingEmptySubsequences: true)
-            .lazy
+        let lines = sequence(state: data.startIndex) { start -> Data? in
+            while start < data.endIndex {
+                let end = data[start...].firstIndex(of: 0x0A) ?? data.endIndex
+                let line = data[start..<end]
+                start = end + 1
+                if !line.isEmpty { return line }
+            }
+            return nil
+        }
+        return lines.lazy
             .compactMap { try? Self.decoder.decode(BackupClipboardItem.self, from: Data($0)) }
     }
 

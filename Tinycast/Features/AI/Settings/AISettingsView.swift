@@ -35,8 +35,10 @@ struct AISettingsView: View {
             Group {
                 defaultModelSection
                 chatSection
+                usageSection
                 conversationsSection
                 systemPromptSection
+                ChatPresetsSection()
                 MCPSettingsSection()
             }
             .settingsEnabled(appSettings.aiEnabled)
@@ -137,6 +139,10 @@ struct AISettingsView: View {
                 SettingsRowTitle(.aiChat, "Suggested replies")
                 Text("Next steps the model offers as buttons after a reply.")
             }
+            Toggle(isOn: $settings.expandsReasoning) {
+                SettingsRowTitle(.aiChat, "Expand thinking")
+                Text("Thinking blocks start expanded instead of collapsed.")
+            }
             Picker(selection: $settings.toolRounds) {
                 ForEach(AIToolRounds.allCases) { Text($0.title).tag($0) }
             } label: {
@@ -149,6 +155,23 @@ struct AISettingsView: View {
             }
         } header: {
             SettingsSectionHeader(.aiChat)
+        }
+    }
+
+    private var usageSection: some View {
+        @Bindable var settings = settings
+        return Section {
+            Toggle(isOn: $settings.usageMenuBarEnabled) {
+                SettingsRowTitle(.aiUsage, "Show usage in menu bar")
+                Text("Claude and Codex plan limits, read from the commands signed in on this Mac.")
+            }
+            Toggle(isOn: $settings.usageAlertsEnabled) {
+                SettingsRowTitle(.aiUsage, "Usage alerts")
+                Text("A notice when a limit reaches 80 or 95 percent, and when a nearly spent one resets.")
+            }
+            .settingsEnabled(settings.usageMenuBarEnabled)
+        } header: {
+            SettingsSectionHeader(.aiUsage)
         }
     }
 

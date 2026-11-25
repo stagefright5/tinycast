@@ -3,13 +3,23 @@
 
 // The page title and meta description, shared by the layout and /llms.txt. Google truncates a
 // description near 160 characters, so `summary` is written to land under it rather than be cut.
-export const pageTitle = "Tinycast: a free, native launcher for macOS";
+export const pageTitle =
+  "Tinycast: a native macOS launcher built for productivity";
 export const summary =
-  "A free, open source macOS launcher with app search, clipboard history, snippets, custom commands, window management, your own AI keys and Raycast extensions.";
+  "A lightweight, open source macOS launcher with app search, clipboard history, snippets, window management, your own AI keys and Raycast extensions.";
+
+// A page that sets its own `openGraph` replaces the layout's whole object, so it names this too.
+export const ogImage = {
+  url: "/og.jpg",
+  width: 1200,
+  height: 630,
+  alt: "The Tinycast logo and tagline beside its command palette, showing fuzzy app search.",
+};
 
 export const site = {
   name: "Tinycast",
   repo: "https://github.com/abue-ammar/tinycast",
+  intelTap: "https://github.com/abue-ammar/homebrew-tinycast",
   url: "https://tinycast.dev",
   // The R2 bucket behind cdn.tinycast.dev. Anything over Workers' 25 MiB
   // per-asset cap lives here instead of `public/` — see website/README.md.
@@ -36,7 +46,7 @@ export const hero = {
     rest: "on your Mac.",
     second: "One keystroke away",
   },
-  sub: "A small, native launcher for your apps, clipboard, snippets and windows. Free and open source, with no account and no telemetry.",
+  sub: "A native macOS launcher built for productivity. Fast, lightweight, and open source, with no account and no telemetry.",
   // The mono line under the buttons. Each fact is stated in the docs.
   facts: ["Under 100 MB of memory", "Zero dependencies", "Free & open source"],
 } as const;
@@ -48,11 +58,9 @@ export const nav = [
   { label: "Changelog", href: "/changelog" },
 ] as const;
 
-// The hero's two lines. Every other channel lives in docs/install.md, which is
+// The hero's line. Every other channel lives in docs/install.md, which is
 // where both install CTAs point.
-export const brewTrustCommand = "brew trust --tap abue-ammar/tinycast";
-export const brewInstallCommand =
-  "brew install --cask abue-ammar/tinycast/tinycast";
+export const brewInstallCommand = "brew install --cask tinycast";
 
 // The logo wall under the hero, in render order. The track starts at the first
 // entry with the left edge under the mask, so the two least-known names lead
@@ -106,7 +114,7 @@ export const badges: Badge[] = [
     height: 66,
   },
   {
-    href: "https://www.trymacapps.com",
+    href: "https://www.trymacapps.com/app/tinycast",
     alt: "Featured on TryMacApps",
     src: "/badges/trymacapps.png",
     width: 200,

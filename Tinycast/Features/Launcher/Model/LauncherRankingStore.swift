@@ -46,10 +46,20 @@ final class LauncherRankingStore {
     init(fileURL: URL? = nil, now: @escaping () -> Date = Date.init) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
         self.now = now
-        let decoded =
-            (try? Data(contentsOf: self.fileURL))
+        visits = Self.live(Self.stored(at: self.fileURL), at: now())
+    }
+
+    /// Adopts a table another process wrote.
+    func reload() {
+        let stored = Self.live(Self.stored(at: fileURL), at: now())
+        guard stored != visits else { return }
+        visits = stored
+        revision &+= 1
+    }
+
+    private static func stored(at fileURL: URL) -> [String: LauncherVisit] {
+        (try? Data(contentsOf: fileURL))
             .flatMap { try? JSONDecoder().decode([String: LauncherVisit].self, from: $0) } ?? [:]
-        visits = Self.live(decoded, at: now())
     }
 
     var isEmpty: Bool { visits.isEmpty }
@@ -156,7 +166,7 @@ final class LauncherRankingStore {
 
     /// Application Support, not Caches: relearning a ranking takes the user weeks of use.
     private static func defaultFileURL() -> URL {
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.tinycast.app"
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.abueammar.tinycast"
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(bundleID, isDirectory: true)
