@@ -10,8 +10,16 @@ final class DictationAudioDucker {
 @MainActor
 @Observable
 final class DictationModelStore {
+    var downloading: DictationModel? { nil }
+    var downloadProgress: (received: Int64, total: Int64)? { nil }
+    var removing: DictationModel? { nil }
+    var transcribing: Bool { false }
+    var installedModels: Set<DictationModel> { [] }
+
     init(idleRelease: DictationIdleRelease) {}
     func isInstalled(_ model: DictationModel) -> Bool { false }
+    func refreshInstalledModels() {}
+    func cancelDownload() {}
     func setIdleRelease(_ option: DictationIdleRelease) {}
     func stop() async {}
 }
@@ -48,6 +56,8 @@ final class DictationCoordinator {
     func cancel(in editor: any InjectableTextView) {}
     func toggle(into editor: any InjectableTextView) { pressed() }
     func prepareForTermination() {}
+    func downloadModel(_ model: DictationModel) async {}
+    func removeModel(_ model: DictationModel) async {}
 }
 
 struct DictationSettingsView: View {

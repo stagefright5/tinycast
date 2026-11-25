@@ -62,6 +62,31 @@ final class ChatHistoryStore {
     init(directory: URL) {}
 }
 
+final class ChatSyncSource: ExcludedSyncSource {
+    init(store: ChatHistoryStore, isActive: @escaping () -> Bool, answering: @escaping () -> Set<UUID>) {
+        super.init(.chats)
+    }
+}
+
+extension RecordSyncSource where Record == ChatPreset {
+    static func chatPresets(_ store: ChatPresetStore, isActive: @escaping () -> Bool) -> Self {
+        excluded(.chatPresets)
+    }
+}
+
+extension RecordSyncSource where Record == CustomQuickAction {
+    static func customQuickActions(_ store: CustomQuickActionStore) -> Self { excluded(.quickActions) }
+}
+
+extension RecordSyncSource where Record == MCPServer {
+    static func mcpServers(
+        _ servers: @escaping () -> [MCPServer], apply: @escaping (MCPServer) -> Void,
+        remove: @escaping (UUID) -> Bool
+    ) -> Self {
+        excluded(.mcpServers)
+    }
+}
+
 struct ChatAttachment: Identifiable {
     let id: UUID
 }
@@ -76,8 +101,10 @@ final class AIChatState {
 @Observable
 final class AIChatSurfacesState {
     let quickAI = AIChatState()
+    var answeringIDs: Set<UUID> { [] }
     init(history: ChatHistoryStore) {}
     func reset() {}
+    func followPreset(id: UUID, to preset: ChatPreset?) {}
 }
 
 @MainActor
@@ -98,7 +125,9 @@ final class AIChatCoordinator {
     /// Ignores `aiEnabled`, so the commands and their shortcuts stay hidden.
     func applyEnabled() { appIndex.setCommandsVisible([.aiChat, .quickAI], false) }
     func applyRetention() {}
-    func toggleWindow() { core.showMessage(ExcludedFeature.message(aiFeature), tone: .danger) }
+    func toggleWindow() { reportExcluded() }
+    func showChat(id: UUID) { reportExcluded() }
+    func showWindow(appendingDraft text: String) { reportExcluded() }
     func focusExisting() -> Bool { false }
     func closeWindowIfKey() -> Bool { false }
     /// True, so `AppCore` never starts an MCP server for a chat.
@@ -109,6 +138,25 @@ final class AIChatCoordinator {
     func selectedReasoningTitle(for chat: AIChatState) -> String { "" }
     @discardableResult
     func prepareModelSwitcher() -> Task<Void, Never> { Task {} }
+
+    private func reportExcluded() {
+        core.showMessage(ExcludedFeature.message(aiFeature), tone: .danger)
+    }
+}
+
+@MainActor
+@Observable
+final class PlanUsageMonitor {}
+
+@MainActor
+final class PlanUsageCoordinator {
+    init(
+        monitor: PlanUsageMonitor, settings: AppSettings, aiSettings: AISettingsStore,
+        installedAI: InstalledAIManager, subscription: ChatGPTSubscriptionManager, core: AppCore
+    ) {}
+
+    /// Ignores `usageMenuBarEnabled`, so no status item appears.
+    func applyEnabled() {}
 }
 
 @MainActor
@@ -125,6 +173,7 @@ final class QuickAICoordinator {
     /// The AI fallback reads `settings.aiEnabled` itself, so it can still land here.
     func ask(_ prompt: String) { show() }
     func show() { core.showMessage(ExcludedFeature.message(aiFeature), tone: .danger) }
+    func show(draft: String) { show() }
     func attachPastedFile(files: [URL]) -> Bool { false }
     func attachPastedFileFromLauncher(files: [URL]) -> Bool { false }
     func removeLastAttachment() -> Bool { false }
@@ -196,7 +245,29 @@ struct AIReasoningButton: View {
 @MainActor
 @Observable
 final class MCPOAuthManager {
+    enum Status: Codable, Equatable, Sendable {
+        case signedOut
+        case signingIn
+        case signedIn
+        case required
+        case failed(String)
+    }
+
+    private(set) var statuses: [UUID: Status] = [:]
+
     func stop() {}
+}
+
+enum MCPServerStatus: Codable, Equatable, Sendable {
+    case stopped
+    case signInRequired
+    case connecting
+    case ready(tools: Int)
+    case failed(String)
+}
+
+struct MCPSecretStore: Sendable {
+    struct Secrets: Codable, Equatable, Sendable {}
 }
 
 @MainActor
@@ -210,7 +281,26 @@ final class MCPServerManager {
 @Observable
 final class MCPCoordinator {
     init(settings: AppSettings, store: MCPSettingsStore, manager: MCPServerManager, core: AppCore) {}
+    var servers: [MCPServer] { [] }
     func applyEnabled() {}
+    func applySynced(_ synced: MCPServer) {}
+    func remove(_ id: UUID) throws {}
+    func discardUnsaved(_ id: UUID) {}
+    func status(of id: UUID) -> MCPServerStatus { .stopped }
+
+    func signIn(_ server: MCPServer, credentials: MCPOAuth.Credentials) async throws {
+        throw ExcludedFeatureError(feature: aiFeature)
+    }
+
+    func signOut(_ id: UUID) throws {}
+
+    func save(_ server: MCPServer, secrets: MCPSecretStore.Secrets) throws {
+        throw ExcludedFeatureError(feature: aiFeature)
+    }
+
+    func test(_ server: MCPServer, secrets: MCPSecretStore.Secrets) async -> MCPServerStatus {
+        .failed(ExcludedFeature.message(aiFeature))
+    }
 }
 
 // MARK: - Quick Actions
@@ -239,6 +329,7 @@ final class QuickActionCoordinator {
 
     func applyCustomQuickActionsPresence() { appIndex.setCustomQuickActions([]) }
     func run(id: UUID) { reportExcluded() }
+    func removeCustomQuickAction(id: UUID) {}
     func run(_ action: QuickAction) { reportExcluded() }
 
     private func reportExcluded() {

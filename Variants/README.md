@@ -46,7 +46,8 @@ ones, so preferences, `settings.json` and backups round-trip unchanged.
 `Stubs/<Feature>/` declares the types the rest of the app calls, with the real signatures and no
 behaviour. A coordinator hides its launcher commands, which also stops their bound shortcuts. An
 entry point that still fires shows "… isn't included in this build", and a Settings pane shows a
-placeholder. No stand-in writes a preference.
+placeholder. A sync source reports nothing and defers every change, as the real one does with its
+feature off, so iCloud never reads that feature's data as deleted. No stand-in writes a preference.
 
 ## Keeping the stand-ins current
 

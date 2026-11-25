@@ -6,6 +6,11 @@ enum ExcludedFeature {
     }
 }
 
+struct ExcludedFeatureError: LocalizedError {
+    let feature: String
+    var errorDescription: String? { ExcludedFeature.message(feature) }
+}
+
 struct ExcludedFeaturePane: View {
     let feature: String
     let symbol: String

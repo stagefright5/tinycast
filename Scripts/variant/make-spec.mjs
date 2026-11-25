@@ -99,12 +99,19 @@ if (plistEdits.deleteKeys.length || plistEdits.removeURLSchemes.length) {
 }
 
 if (entitlementDeletes.length) {
-  const source = resolve(root, base.CODE_SIGN_ENTITLEMENTS ?? fail("no CODE_SIGN_ENTITLEMENTS"));
-  const entitlements = readPlist(source);
-  for (const key of entitlementDeletes) delete entitlements[key];
-  const derived = resolve(outDir, "Tinycast.entitlements");
-  writePlist(derived, entitlements);
-  base.CODE_SIGN_ENTITLEMENTS = derived;
+  const setting = base.CODE_SIGN_ENTITLEMENTS ?? fail("no CODE_SIGN_ENTITLEMENTS");
+  if (setting.startsWith("/")) fail(`CODE_SIGN_ENTITLEMENTS must be relative to the root: ${setting}`);
+  // The setting can name a build variable, so strip every file it may resolve to and keep it.
+  const mirror = resolve(outDir, "entitlements");
+  const sourceDir = join(root, "Tinycast");
+  for (const name of readdirSync(sourceDir).filter((f) => f.endsWith(".entitlements"))) {
+    const entitlements = readPlist(join(sourceDir, name));
+    for (const key of entitlementDeletes) delete entitlements[key];
+    const derived = join(mirror, "Tinycast", name);
+    mkdirSync(dirname(derived), { recursive: true });
+    writePlist(derived, entitlements);
+  }
+  base.CODE_SIGN_ENTITLEMENTS = join(mirror, setting);
 }
 
 writeFileSync(join(outDir, "project.json"), JSON.stringify(spec, null, 2));

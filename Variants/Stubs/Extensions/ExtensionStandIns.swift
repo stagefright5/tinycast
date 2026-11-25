@@ -10,6 +10,80 @@ enum ExtensionRuntime {
     }
 }
 
+private let extensionsFeature = "Raycast Extensions"
+
+/// Every real case, as the main app's Settings handler switches over them; no slim pane sends one.
+enum ExtensionCall: Codable, Sendable {
+    case refresh
+    case checkForUpdates
+    case installFolder(URL)
+    case importFromRaycast([URL])
+    case update([String])
+    case installListing(ExtensionListing)
+    case installGitHub(ExtensionGitHubSource)
+    case uninstall(String)
+}
+
+struct ExtensionInstaller: Sendable {
+    enum Progress: Codable, Sendable, Equatable {
+        case installing
+    }
+}
+
+enum ExtensionCallEvent: Codable, Sendable {
+    case installing(ExtensionInstaller.Progress)
+    case imported(Int)
+}
+
+struct ExtensionCallResult: Codable, Sendable {
+    var failures: [String] = []
+    var error: String?
+    var installedTitle: String?
+}
+
+struct ExtensionCommandRef: Codable, Sendable, Hashable {
+    let extensionName: String
+    let commandName: String
+
+    var entryID: String { "extension:\(extensionName)/\(commandName)" }
+}
+
+struct InstalledExtension: Sendable, Hashable, Identifiable {
+    let manifest: ExtensionManifest
+    let directory: URL
+
+    var id: String { manifest.name }
+    var title: String { manifest.title }
+    var commandEntryIDs: [String] { [] }
+}
+
+enum ExtensionCatalog {
+    nonisolated static func importableFromRaycast() -> [InstalledExtension] { [] }
+}
+
+@MainActor
+final class ExtensionStorage {
+    func setPreference(extension name: String, key: String, value: ExtensionPreferenceValue?) {}
+}
+
+@MainActor
+@Observable
+final class ExtensionAppearanceStore {
+    func appearance(for extensionName: String) -> ExtensionAppearance? { nil }
+}
+
+@MainActor
+@Observable
+final class ExtensionLibrary {
+    init(mainApp: MainAppLink) {}
+}
+
+final class ExtensionSyncSource: ExcludedSyncSource {
+    init(manager: ExtensionManager) {
+        super.init(.extensions)
+    }
+}
+
 enum ExtensionSessionState: Equatable {
     case idle
     case rendered(RenderTree)
@@ -19,6 +93,11 @@ enum ExtensionSessionState: Equatable {
 @Observable
 final class ExtensionManager {
     private(set) var state: ExtensionSessionState = .idle
+    private(set) var installed: [InstalledExtension] = []
+    private(set) var updates: [String: ExtensionListing] = [:]
+    private(set) var updating: Set<String> = []
+    let storage = ExtensionStorage()
+    let appearances = ExtensionAppearanceStore()
     var running: Never? { nil }
     var isSigningIn: Bool { false }
     var navigationDepth: Int { 1 }
@@ -34,6 +113,42 @@ final class ExtensionManager {
     func isBackgroundEnabled(for entry: AppEntry) -> Bool { false }
     func toggleBackgroundRefresh(for entry: AppEntry) {}
     func refreshNow(_ entry: AppEntry) {}
+    func refresh() async {}
+    func checkForUpdates() async {}
+    func install(from source: URL) async throws { throw ExcludedFeatureError(feature: extensionsFeature) }
+
+    func install(
+        _ listing: ExtensionListing,
+        onProgress: @Sendable @escaping (ExtensionInstaller.Progress) -> Void
+    ) async throws {
+        throw ExcludedFeatureError(feature: extensionsFeature)
+    }
+
+    @discardableResult
+    func install(
+        _ source: ExtensionGitHubSource, packageManager: ExtensionPackageManager,
+        additionalSearchPaths: [String],
+        onProgress: @Sendable @escaping (ExtensionInstaller.Progress) -> Void
+    ) async throws -> InstalledExtension {
+        throw ExcludedFeatureError(feature: extensionsFeature)
+    }
+
+    @discardableResult
+    func importAllFromRaycast(
+        _ candidates: [InstalledExtension], onProgress: (Int) -> Void = { _ in }
+    ) async -> [String] {
+        candidates.map(\.title)
+    }
+
+    func update(_ names: [String]) async -> [String] { names }
+    func uninstall(_ installedExtension: InstalledExtension) async {}
+    func setAppearance(_ appearance: ExtensionAppearance?, for extensionName: String) {}
+
+    func backgroundInfo(extension name: String, command: String) -> ExtensionCommandMetadata {
+        ExtensionCommandMetadata()
+    }
+
+    func setBackgroundEnabled(_ enabled: Bool, extension name: String, command: String) {}
 }
 
 @MainActor
@@ -54,6 +169,8 @@ final class ExtensionCoordinator {
     func runExtensionCommand(entryID: String) { reportExcluded() }
     func runExtensionCommand(_ app: AppEntry, arguments: [String: String] = [:]) { reportExcluded() }
     func runDeepLink(_ link: ExtensionDeepLink) { reportExcluded() }
+    func deepLink(forEntryID entryID: String, arguments: [String: String]) -> URL? { nil }
+    func setMenuBarEnabled(_ enabled: Bool, reference: ExtensionCommandRef) {}
     func showStoreInstall(_ install: ExtensionDeepLink.StoreInstall) { reportExcluded() }
     func showExtensionSettings(for app: AppEntry) {}
     func confirmUninstall(_ app: AppEntry) {}
@@ -62,7 +179,7 @@ final class ExtensionCoordinator {
     func exitExtensionScreen() {}
 
     private func reportExcluded() {
-        core.showMessage(ExcludedFeature.message("Raycast Extensions"), tone: .danger)
+        core.showMessage(ExcludedFeature.message(extensionsFeature), tone: .danger)
     }
 }
 
@@ -129,6 +246,6 @@ struct ExtensionToastSlot: ViewModifier {
 
 struct ExtensionsSettingsView: View {
     var body: some View {
-        ExcludedFeaturePane(feature: "Raycast Extensions", symbol: "puzzlepiece.extension")
+        ExcludedFeaturePane(feature: extensionsFeature, symbol: "puzzlepiece.extension")
     }
 }
